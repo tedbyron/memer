@@ -1,0 +1,12 @@
+[package]
+name = "memer"
+version = "0.1.0"
+edition = "2021"
+description = "Discord meme bot."
+authors = ["Teddy Byron <ted@tedbyron.com>"]
+repository = "https://github.com/tedbyron/memer"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["discord", "bot"]
+
+[dependencies]
