@@ -8,7 +8,7 @@ use anyhow::{Context as _, Error, Result};
 use poise::builtins::create_application_commands;
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
-use tracing::{debug, error, info, trace};
+use tracing::{error, info, info_span, trace};
 use tracing_subscriber::EnvFilter;
 
 mod commands;
@@ -31,7 +31,7 @@ async fn main() {
     process::exit(match run().await {
         Ok(_) => 0,
         Err(error) => {
-            error!(%error);
+            error!("{error}");
             1
         }
     });
@@ -45,17 +45,14 @@ async fn run() -> Result<()> {
         env::set_var("MEMER_LOG", "INFO");
     }
 
-    // Setup tracing subscriber
     tracing_subscriber::fmt()
         .with_target(false)
         .with_env_filter(EnvFilter::from_env("MEMER_LOG"))
         .init();
     trace!(command = %env::args().collect::<Vec<_>>().join(" "));
 
-    // Get and validate bot token and app ID
-    let (token, app_id) = utils::token_app_id()?;
-
-    // Command options
+    let token = utils::token()?;
+    let app_id = utils::app_id()?;
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
         #[rustfmt::skip]
         commands: vec![
@@ -65,7 +62,6 @@ async fn run() -> Result<()> {
         ..FrameworkOptions::default()
     };
 
-    // Build framework
     let framework = Framework::build()
         .token(token)
         .client_settings(move |client| client.application_id(app_id))
@@ -82,10 +78,14 @@ async fn run() -> Result<()> {
             let bot_tag = user.tag();
 
             Box::pin(async move {
+                let span = info_span!("setup");
+                let span_guard = span.enter();
+
                 utils::invite_url(ctx, ready).await;
                 utils::set_activity(ctx).await;
 
-                debug!("setting application commands on all servers...");
+                info!("registering application commands on all servers...");
+
                 for guild_id in guild_ids {
                     guild_id
                         .set_application_commands(ctx, |commands| {
@@ -96,6 +96,9 @@ async fn run() -> Result<()> {
                         .or_trace();
                 }
 
+                info!("finished registering application commands");
+                drop(span_guard);
+
                 Ok(Data { bot_name, bot_tag })
             })
         })
@@ -105,7 +108,6 @@ async fn run() -> Result<()> {
 
     let shard_mgr = Arc::clone(&framework.shard_manager());
 
-    // Ctrl+c handler to shutdown all shards
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
@@ -113,6 +115,8 @@ async fn run() -> Result<()> {
             .or_trace();
         shard_mgr.lock().await.shutdown_all().await;
     });
+
+    info!("ready");
 
     framework.start_autosharded().await?;
 

@@ -6,8 +6,8 @@ use anyhow::{bail, Result};
 use poise::serenity_prelude::*;
 use tracing::{info, warn};
 
-/// Get and validate the bot token and app ID.
-pub fn token_app_id() -> Result<(String, u64)> {
+/// Get and validate the bot token.
+pub fn token() -> Result<String> {
     let token = match env::var("MEMER_TOKEN") {
         Ok(token) => token,
         Err(_) => bail!("missing MEMER_TOKEN environment variable"),
@@ -17,15 +17,18 @@ pub fn token_app_id() -> Result<(String, u64)> {
         bail!("invalid MEMER_TOKEN environment variable");
     }
 
-    let app_id = match env::var("MEMER_APPLICATION_ID") {
+    Ok(token)
+}
+
+/// Get the bot application ID.
+pub fn app_id() -> Result<u64> {
+    match env::var("MEMER_APPLICATION_ID") {
         Ok(id) => match id.parse::<u64>() {
-            Ok(parsed) => parsed,
+            Ok(parsed) => Ok(parsed),
             Err(_) => bail!("invalid MEMER_APPLICATION_ID environment variable"),
         },
         Err(_) => bail!("missing MEMER_APPLICATION_ID environment variable"),
-    };
-
-    Ok((token, app_id))
+    }
 }
 
 /// Generate an invite URL for the bot.
