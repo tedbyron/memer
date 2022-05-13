@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::{env, process};
 
-use anyhow::{bail, Error, Result};
+use anyhow::{Context as _, Error, Result};
 use poise::builtins::create_application_commands;
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
@@ -53,25 +53,12 @@ async fn run() -> Result<()> {
     trace!(command = %env::args().collect::<Vec<_>>().join(" "));
 
     // Get and validate bot token and app ID
-    let token = match env::var("MEMER_TOKEN") {
-        Ok(token) => token,
-        Err(_) => bail!("Missing MEMER_TOKEN environment variable"),
-    };
-    if validate_token(&token).is_err() {
-        bail!("Invalid MEMER_TOKEN environment variable");
-    }
-    let app_id = match env::var("MEMER_APPLICATION_ID") {
-        Ok(id) => match id.parse::<u64>() {
-            Ok(parsed) => parsed,
-            Err(_) => bail!("Invalid MEMER_APPLICATION_ID environment variable"),
-        },
-        Err(_) => bail!("Missing MEMER_APPLICATION_ID environment variable"),
-    };
+    let (token, app_id) = utils::token_app_id()?;
 
     // Command options
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
+        #[rustfmt::skip]
         commands: vec![
-            // Admin
             commands::admin::ping(),
             commands::admin::register(),
         ],
@@ -89,7 +76,7 @@ async fn run() -> Result<()> {
             let guild_ids = guilds.iter().map(|g| g.id);
 
             info!(guilds = ?guild_ids.clone().map(|id| id.0).collect::<Vec<_>>());
-            info!("Logged in as {}", user.tag());
+            info!("logged in as {}", user.tag());
 
             let bot_name = user.name.to_string();
             let bot_tag = user.tag();
@@ -98,7 +85,7 @@ async fn run() -> Result<()> {
                 utils::invite_url(ctx, ready).await;
                 utils::set_activity(ctx).await;
 
-                debug!("Setting application commands on all servers...");
+                debug!("setting application commands on all servers...");
                 for guild_id in guild_ids {
                     guild_id
                         .set_application_commands(ctx, |commands| {
@@ -122,7 +109,8 @@ async fn run() -> Result<()> {
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
-            .expect("Failed to install ctrl-c handler");
+            .context("failed to install ctrl-c handler")
+            .or_trace();
         shard_mgr.lock().await.shutdown_all().await;
     });
 

@@ -2,8 +2,31 @@
 
 use std::env;
 
+use anyhow::{bail, Result};
 use poise::serenity_prelude::*;
 use tracing::{info, warn};
+
+/// Get and validate the bot token and app ID.
+pub fn token_app_id() -> Result<(String, u64)> {
+    let token = match env::var("MEMER_TOKEN") {
+        Ok(token) => token,
+        Err(_) => bail!("missing MEMER_TOKEN environment variable"),
+    };
+
+    if validate_token(&token).is_err() {
+        bail!("invalid MEMER_TOKEN environment variable");
+    }
+
+    let app_id = match env::var("MEMER_APPLICATION_ID") {
+        Ok(id) => match id.parse::<u64>() {
+            Ok(parsed) => parsed,
+            Err(_) => bail!("invalid MEMER_APPLICATION_ID environment variable"),
+        },
+        Err(_) => bail!("missing MEMER_APPLICATION_ID environment variable"),
+    };
+
+    Ok((token, app_id))
+}
 
 /// Generate an invite URL for the bot.
 #[tracing::instrument(skip_all)]
@@ -22,7 +45,7 @@ where
     {
         info!("{url}");
     } else {
-        warn!("Could not generate a bot invite URL");
+        warn!("could not generate a bot invite URL");
     }
 }
 
@@ -38,7 +61,7 @@ pub async fn set_activity(ctx: &Context) {
             let activity_type = match type_str {
                 "competing" | "listening" | "playing" | "streaming" | "watching" => type_str,
                 _ => {
-                    tracing::warn!("Invalid MEMER_ACTIVITY_TYPE environment variable");
+                    tracing::warn!("invalid MEMER_ACTIVITY_TYPE environment variable");
                     ""
                 }
             };
@@ -51,7 +74,7 @@ pub async fn set_activity(ctx: &Context) {
                     if let Ok(streaming) = env::var("MEMER_ACTIVITY_STREAMING") {
                         Some(Activity::streaming(name, streaming))
                     } else {
-                        tracing::warn!("Missing MEMER_ACTIVITY_STREAMING environment variable");
+                        tracing::warn!("missing MEMER_ACTIVITY_STREAMING environment variable");
                         None
                     }
                 }
