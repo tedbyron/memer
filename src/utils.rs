@@ -7,6 +7,7 @@ use poise::serenity_prelude::*;
 use tracing::{info, warn};
 
 /// Get and validate the bot token.
+#[tracing::instrument]
 pub fn token() -> Result<String> {
     let token = match env::var("MEMER_TOKEN") {
         Ok(token) => token,
@@ -21,6 +22,7 @@ pub fn token() -> Result<String> {
 }
 
 /// Get the bot application ID.
+#[tracing::instrument]
 pub fn app_id() -> Result<u64> {
     match env::var("MEMER_APPLICATION_ID") {
         Ok(id) => match id.parse::<u64>() {

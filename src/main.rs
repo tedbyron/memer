@@ -13,6 +13,7 @@ use tracing_subscriber::EnvFilter;
 
 mod commands;
 mod common;
+mod db;
 mod error;
 mod utils;
 
@@ -22,6 +23,8 @@ pub use error::TraceErr;
 pub struct Data {
     pub bot_name: String,
     pub bot_tag: String,
+    pub mongo: mongodb::Client,
+    pub db: mongodb::Database,
 }
 
 pub type Context<'a> = poise::Context<'a, Data, Error>;
@@ -53,6 +56,8 @@ async fn run() -> Result<()> {
 
     let token = utils::token()?;
     let app_id = utils::app_id()?;
+    let (mongo, db) = db::client().await?;
+
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
         #[rustfmt::skip]
         commands: vec![
@@ -99,7 +104,12 @@ async fn run() -> Result<()> {
                 info!("finished registering application commands");
                 drop(span_guard);
 
-                Ok(Data { bot_name, bot_tag })
+                Ok(Data {
+                    bot_name,
+                    bot_tag,
+                    mongo,
+                    db,
+                })
             })
         })
         .options(options)

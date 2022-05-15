@@ -13,6 +13,9 @@ Based on [chand1012/Discord-Quick-Meme](https://github.com/chand1012/Discord-Qui
 MEMER_TOKEN=
 MEMER_APPLICATION_ID=
 
+MEMER_MONGO_URI=
+MEMER_MONGO_DB=
+
 # Optional (ERROR < WARN < INFO <= DEBUG < TRACE), default = INFO
 MEMER_LOG=
 

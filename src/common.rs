@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use anyhow::{Error, Result};
+use anyhow::Result;
 use poise::async_trait;
 use poise::serenity_prelude::*;
 
@@ -29,10 +29,10 @@ impl Respond for ApplicationCommandInteraction {
                 .interaction_response_data(|msg| msg.content(content))
         })
         .await
-        .map_err(Error::from)
+        .map_err(Into::into)
     }
 
-    /// Respond to an interaction with an error message.
+    /// Respond to an interaction with an error.
     #[tracing::instrument(skip_all)]
     async fn respond_err<E>(&self, ctx: &Context, error: E) -> Result<()>
     where
@@ -45,6 +45,6 @@ impl Respond for ApplicationCommandInteraction {
                 })
         })
         .await
-        .map_err(Error::from)
+        .map_err(Into::into)
     }
 }

@@ -1,6 +1,6 @@
 //! Error utilities
 
-use std::fmt;
+use std::fmt::Debug;
 
 use tracing::error;
 
@@ -11,17 +11,17 @@ pub trait TraceErr {
 
 impl<T, E> TraceErr for Result<T, E>
 where
-    E: fmt::Debug,
+    E: Debug,
 {
     fn or_trace(self) {
         if let Err(e) = self {
-            error!("{:?}", e);
+            error!("{e:?}");
         }
     }
 
     fn trace_err(self) -> Self {
         if let Err(ref e) = self {
-            error!("{:?}", e);
+            error!("{e:?}");
         }
 
         self
