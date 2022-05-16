@@ -39,7 +39,7 @@ pub async fn invite_url<H>(http: H, ready: &Ready)
 where
     H: AsRef<Http> + Send + Sync,
 {
-    if let Ok(url) = ready
+    match ready
         .user
         .invite_url_with_oauth2_scopes(
             http,
@@ -48,9 +48,8 @@ where
         )
         .await
     {
-        info!("{url}");
-    } else {
-        warn!("could not generate a bot invite URL");
+        Ok(url) => info!(invite_url = %url),
+        Err(_) => warn!("could not generate a bot invite URL"),
     }
 }
 

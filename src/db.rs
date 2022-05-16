@@ -4,10 +4,13 @@ use std::env;
 
 use anyhow::{anyhow, bail, Result};
 use mongodb::bson::oid::ObjectId;
+use mongodb::bson::{self, Bson};
 use mongodb::options::ClientOptions;
 use mongodb::{Client, Database};
+use poise::futures_util::StreamExt;
+use tracing::error;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Channel {
     #[serde(rename = "channel")]
     channel_id: String,
@@ -18,7 +21,7 @@ pub struct Channel {
     id: Option<ObjectId>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct BannedSub {
     #[serde(rename = "channel")]
     channel_id: String,
@@ -28,6 +31,7 @@ pub struct BannedSub {
 }
 
 /// Create a mongodb client.
+#[tracing::instrument]
 pub async fn client() -> Result<(Client, Database)> {
     let mongo_uri = match env::var("MEMER_MONGO_URI") {
         Ok(mongo_uri) => mongo_uri,
@@ -51,14 +55,19 @@ pub async fn client() -> Result<(Client, Database)> {
     Ok((client, db))
 }
 
-// /// Get all channel names from the database.
-// pub async fn channel_names(db: &Database) -> Result<()> {
-//     let mut cursor = db.collection("channels").find(None, None).await?;
+/// Get all channel names from the database.
+#[tracing::instrument(skip_all)]
+pub async fn channel_names(db: &Database) -> Result<()> {
+    let mut cursor = db.collection("channels").find(None, None).await?;
 
-//     while let Some(doc) = cursor.next().await {
-//         let channel = bson::from_bson::<Channel>(Bson::Document(doc?))?;
-//         println!("{}", channel.name);
-//     }
+    while let Some(doc) = cursor.next().await {
+        if let Ok(doc) = doc {
+            match bson::from_bson::<Channel>(Bson::Document(doc)) {
+                Ok(channel) => todo!(),
+                Err(e) => error!("{e}"),
+            }
+        }
+    }
 
-//     Ok(())
-// }
+    Ok(())
+}

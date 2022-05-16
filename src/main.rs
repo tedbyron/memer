@@ -33,8 +33,8 @@ pub type Context<'a> = poise::Context<'a, Data, Error>;
 async fn main() {
     process::exit(match run().await {
         Ok(_) => 0,
-        Err(error) => {
-            error!("{error}");
+        Err(e) => {
+            error!("{e}");
             1
         }
     });
