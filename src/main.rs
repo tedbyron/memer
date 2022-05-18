@@ -13,19 +13,14 @@ use tracing_subscriber::EnvFilter;
 
 mod commands;
 mod common;
+mod data;
 mod db;
 mod error;
 mod utils;
 
 pub use common::Respond;
+use data::Data;
 pub use error::TraceErr;
-
-pub struct Data {
-    pub bot_name: String,
-    pub bot_tag: String,
-    pub mongo: mongodb::Client,
-    pub db: mongodb::Database,
-}
 
 pub type Context<'a> = poise::Context<'a, Data, Error>;
 
@@ -107,6 +102,7 @@ async fn run() -> Result<()> {
                 Ok(Data {
                     bot_name,
                     bot_tag,
+
                     mongo,
                     db,
                 })
