@@ -1,7 +1,6 @@
 //! Utility functions
 
-use std::path::Path;
-use std::{env, fs};
+use std::env;
 
 use anyhow::{bail, Result};
 use poise::serenity_prelude::*;
@@ -93,18 +92,4 @@ pub async fn set_activity(ctx: &Context) {
     if let Some(activity) = activity {
         ctx.set_activity(activity).await;
     }
-}
-
-#[derive(Debug, serde::Deserialize)]
-pub struct Subs {
-    memes: Vec<String>,
-    text: Vec<String>,
-    hentai: Vec<String>,
-    news: Vec<String>,
-    fiftyfifty: Vec<String>,
-}
-
-/// Get all subreddits from the specified file
-pub fn subs(path: &Path) -> Result<Subs> {
-    Ok(serde_json::from_str::<Subs>(&fs::read_to_string(path)?)?)
 }

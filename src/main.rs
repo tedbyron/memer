@@ -1,10 +1,13 @@
 #![warn(clippy::all, clippy::nursery, rust_2018_idioms)]
 #![doc = include_str!("../README.md")]
 
+use std::env;
+use std::process::ExitCode;
 use std::sync::Arc;
-use std::{env, process};
 
 use anyhow::{Context as _, Error, Result};
+use chrono::offset::Utc;
+use dashmap::DashMap;
 use poise::builtins::create_application_commands;
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
@@ -25,14 +28,14 @@ pub use error::TraceErr;
 pub type Context<'a> = poise::Context<'a, Data, Error>;
 
 #[tokio::main]
-async fn main() {
-    process::exit(match run().await {
-        Ok(_) => 0,
+async fn main() -> ExitCode {
+    match run().await {
+        Ok(_) => ExitCode::SUCCESS,
         Err(e) => {
             error!("{e}");
-            1
+            ExitCode::FAILURE
         }
-    });
+    }
 }
 
 async fn run() -> Result<()> {
@@ -49,10 +52,18 @@ async fn run() -> Result<()> {
         .init();
     trace!(command = %env::args().collect::<Vec<_>>().join(" "));
 
+    // Framework values
     let token = utils::token()?;
     let app_id = utils::app_id()?;
-    let (mongo, db) = db::client().await?;
 
+    // User data values
+    let (mongo, db) = db::client().await?;
+    let subs = data::subs_from_file()?;
+    let cache_time = Utc::now();
+    let posts = data::all_posts(&subs).await;
+    let blacklist_time = Utc::now();
+
+    // Framework options
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
         #[rustfmt::skip]
         commands: vec![
@@ -105,6 +116,19 @@ async fn run() -> Result<()> {
 
                     mongo,
                     db,
+
+                    cache_time,
+                    blacklist_time,
+
+                    subs,
+                    nsfw,
+                    posts,
+                    blacklist,
+                    last_post,
+
+                    request_count,
+                    req_timer,
+                    queue_state,
                 })
             })
         })
@@ -113,7 +137,6 @@ async fn run() -> Result<()> {
         .await?;
 
     let shard_mgr = Arc::clone(&framework.shard_manager());
-
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
@@ -123,7 +146,6 @@ async fn run() -> Result<()> {
     });
 
     info!("ready");
-
     framework.start_autosharded().await?;
 
     Ok(())
