@@ -76,7 +76,7 @@ pub fn subs_from_file() -> Result<Subs> {
     Ok(subs)
 }
 
-/// Get the top 25 hot reddit posts for all subs.
+/// Get the top 25 hot posts for all subreddits.
 pub async fn hot_posts(subs: &Subs) -> Arc<DashMap<String, Vec<QuickPost>>> {
     let subs = subs.clone().into_read_only();
     let subs = subs.values().flatten().collect::<Vec<_>>();
@@ -88,7 +88,8 @@ pub async fn hot_posts(subs: &Subs) -> Arc<DashMap<String, Vec<QuickPost>>> {
     posts
 }
 
-/// Get the top 25 hot reddit posts from a sub.
+/// Retrieve the top 25 hot reddit posts for the specified subreddit, and store them as `QuickPost`s
+/// in a map.
 async fn get_hot<S>(sub_name: S, posts: Arc<DashMap<String, Vec<QuickPost>>>)
 where
     S: AsRef<str>,
