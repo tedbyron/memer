@@ -14,6 +14,7 @@ use tokio::time::Instant;
 use tracing::{error, info, info_span, trace, Instrument};
 use tracing_subscriber::EnvFilter;
 
+mod channel_id;
 mod commands;
 mod common;
 mod data;
@@ -57,7 +58,7 @@ async fn run() -> Result<()> {
     let app_id = setup::app_id()?;
 
     // User data values
-    let (mongo, db) = db::client().await?;
+    let (mongo, db) = db::client_and_db().await?;
     let subs = setup::subs_from_file()?;
 
     // Framework options
@@ -83,9 +84,6 @@ async fn run() -> Result<()> {
 
                     info!("logged in as {} on {} servers", user.tag(), guilds.len());
 
-                    let bot_name = user.name.to_string();
-                    let bot_tag = user.tag();
-
                     let cache_time = Utc::now();
                     let posts = setup::populate_posts(&subs).await;
 
@@ -98,8 +96,9 @@ async fn run() -> Result<()> {
                     info!("done in {}", humantime::Duration::from(timer.elapsed()));
 
                     Ok(Data {
-                        bot_name,
-                        bot_tag,
+                        bot_id: user.id.0,
+                        bot_name: user.name.to_string(),
+                        bot_tag: user.tag(),
 
                         mongo,
                         db,
@@ -107,6 +106,7 @@ async fn run() -> Result<()> {
                         cache_time,
                         blacklist_time,
 
+                        channels,
                         subs,
                         nsfw,
                         posts,

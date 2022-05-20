@@ -1,8 +1,8 @@
 //! Utility functions
 
-use std::env;
-use std::fs;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::{env, fs};
 
 use anyhow::{bail, Context as _, Error, Result};
 use dashmap::DashMap;
@@ -14,7 +14,7 @@ use roux::Subreddit;
 use tokio::time::Instant;
 use tracing::{error, info, warn};
 
-use crate::data::{self, QuickPost, SubMap};
+use crate::data::{self, QuickPost};
 use crate::Data;
 
 /// Get and validate the bot token.
@@ -105,14 +105,14 @@ pub async fn set_activity(ctx: &Context) {
     }
 }
 
-/// Load subreddits from `subs.json`.
-pub fn subs_from_file() -> Result<SubMap> {
+/// Load subreddits groups and subreddit names from `subs.json`.
+pub fn subs_from_file() -> Result<HashMap<String, Vec<String>>> {
     let path = env::current_dir()
         .context("failed to get cwd")?
         .join("subs.json");
     let contents = fs::read_to_string(path)
         .with_context(|| &format!("failed to read file: {}", path.display()))?;
-    let subs = serde_json::from_str::<SubMap>(&contents)
+    let subs = serde_json::from_str::<HashMap<String, Vec<String>>>(&contents)
         .with_context(|| format!("failed to deserialize file: {}", path.display()))?;
 
     Ok(subs)
@@ -148,13 +148,14 @@ pub async fn register_commands<I>(
 
 /// Get the top 100 hot posts for all subreddits.
 #[tracing::instrument(skip_all)]
-pub async fn populate_posts(sub_map: &SubMap) -> Arc<DashMap<String, Vec<QuickPost>>> {
+pub async fn populate_posts(
+    sub_map: &HashMap<String, Vec<String>>,
+) -> Arc<DashMap<String, Vec<QuickPost>>> {
     info!("populating subreddit post data...");
     info!(?sub_map);
     let timer = Instant::now();
 
-    let view = sub_map.clone().into_read_only();
-    let subs = view.values().flatten().collect::<Vec<_>>();
+    let subs = sub_map.values().flatten().collect::<Vec<_>>();
     let posts = Arc::new(DashMap::with_capacity(subs.len()));
 
     future::join_all(
@@ -167,8 +168,7 @@ pub async fn populate_posts(sub_map: &SubMap) -> Arc<DashMap<String, Vec<QuickPo
     posts
 }
 
-/// Retrieve the top 100 hot reddit posts for the specified subreddit, and store them as
-/// `QuickPost`s in a map.
+/// Retrieve the top 100 hot posts for the specified subreddit and store them as `QuickPost`s.
 #[tracing::instrument(skip_all, fields(subreddit = %sub_name))]
 async fn get_hot_posts(sub_name: &str, posts: Arc<DashMap<String, Vec<QuickPost>>>) {
     let sub = Subreddit::new(sub_name);

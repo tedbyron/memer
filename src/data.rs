@@ -1,35 +1,47 @@
 //! Poise framework data
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use mongodb::{Client, Database};
+use poise::serenity_prelude::ChannelId;
 use roux::responses::BasicThing;
 use roux::subreddit::responses::Submissions;
 
+use crate::db::ChannelInfo;
+
 #[derive(Debug)]
 pub struct Data {
-    pub bot_name: String,
+    /// The bot's `UserId`.
+    pub bot_id: u64,
+    /// The bot's tag.
     pub bot_tag: String,
+    /// The bot's name.
+    pub bot_name: String,
 
+    /// Database client.
     pub mongo: Client,
+    /// The default database.
     pub db: Database,
 
     pub cache_time: DateTime<Utc>,
     pub blacklist_time: DateTime<Utc>,
 
-    pub servers: DashMap<String, String>,
-    pub nsfw: DashMap<String, bool>,
+    /// Map of discord channel IDs the bot is active in, and the channels' names and nsfw statuses.
+    pub channels: Arc<DashMap<ChannelId, ChannelInfo>>,
+    /// Map of subreddit names and their top 100 hot posts.
     pub posts: Arc<DashMap<String, Vec<QuickPost>>>,
     pub blacklist: Arc<DashMap<String, Vec<QuickPost>>>,
     pub last_post: Arc<DashMap<String, QuickPost>>,
-    pub subs: SubMap,
+    /// Map of subreddit groups and subreddit names.
+    pub subs: HashMap<String, Vec<String>>,
 
-    pub request_count: DashMap<String, u8>,
-    pub req_timer: DashMap<String, Duration>,
-    pub queue_state: DashMap<String, bool>,
+    pub request_count: Arc<DashMap<String, u8>>,
+    pub req_timer: Arc<DashMap<String, Duration>>,
+    pub queue_state: Arc<DashMap<String, bool>>,
 }
 
 /// Specific data for a reddit post.
@@ -42,9 +54,6 @@ pub struct QuickPost {
     pub permalink: String,
     pub sub: String,
 }
-
-/// Map of subreddit genres and subreddit names.
-pub type SubMap = DashMap<String, Vec<String>>;
 
 impl Data {
     /// Add reddit posts to the cache.
