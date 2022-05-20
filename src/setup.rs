@@ -1,4 +1,4 @@
-//! Setup functions
+//! Bot setup helpers
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -20,10 +20,7 @@ use crate::Data;
 /// Get and validate the bot token.
 #[tracing::instrument]
 pub fn token() -> Result<String> {
-    let token = match env::var("MEMER_TOKEN") {
-        Ok(token) => token,
-        Err(_) => bail!("missing MEMER_TOKEN environment variable"),
-    };
+    let token = env::var("MEMER_TOKEN").context("missing MEMER_TOKEN environment variable")?;
 
     if validate_token(&token).is_err() {
         bail!("invalid MEMER_TOKEN environment variable");
@@ -36,11 +33,10 @@ pub fn token() -> Result<String> {
 #[tracing::instrument]
 pub fn app_id() -> Result<u64> {
     match env::var("MEMER_APPLICATION_ID") {
-        Ok(id) => match id.parse::<u64>() {
-            Ok(parsed) => Ok(parsed),
-            Err(_) => bail!("invalid MEMER_APPLICATION_ID environment variable"),
-        },
-        Err(_) => bail!("missing MEMER_APPLICATION_ID environment variable"),
+        Ok(id) => id
+            .parse::<u64>()
+            .context("invalid MEMER_APPLICATION_ID environment variable"),
+        Err(e) => Err(e).context("missing MEMER_APPLICATION_ID environment variable"),
     }
 }
 
@@ -59,8 +55,8 @@ where
         )
         .await
     {
-        Ok(url) => info!(invite_url = %url),
-        Err(_) => warn!("could not generate a bot invite URL"),
+        Ok(invite_url) => info!(%invite_url),
+        Err(_) => warn!("failed to generate a bot invite URL"),
     }
 }
 
@@ -121,46 +117,48 @@ pub fn subs_from_file() -> Result<HashMap<String, Vec<String>>> {
 /// Register application commands on all servers.
 #[tracing::instrument(skip_all)]
 pub async fn register_commands<I>(
-    ctx: &Context,
-    framework: &Framework<Data, Error>,
-    guilds: &[UnavailableGuild],
+    ctx: &'static Context,
+    framework: &'static Framework<Data, Error>,
+    guilds: &'static [UnavailableGuild],
 ) {
     info!("registering application commands on all servers...");
     let timer = Instant::now();
 
     future::join_all(guilds.iter().map(|guild| {
-        guild
-            .id
-            .set_application_commands(ctx, |commands| {
-                *commands = create_application_commands(&framework.options().commands);
-                commands
-            })
-            .inspect(|res| {
-                if res.is_err() {
-                    error!("failed to set applications for guild: {}", guild.id)
-                }
-            })
+        tokio::spawn(
+            guild
+                .id
+                .set_application_commands(ctx, |commands| {
+                    *commands = create_application_commands(&framework.options().commands);
+                    commands
+                })
+                .inspect(|res| {
+                    if res.is_err() {
+                        error!("failed to set applications for guild: {}", guild.id)
+                    }
+                }),
+        )
     }))
     .await;
 
     info!("done in {}", humantime::Duration::from(timer.elapsed()));
 }
 
-/// Get the top 100 hot posts for all subreddits.
+/// Get the first 100 hot posts for all subreddits.
 #[tracing::instrument(skip_all)]
 pub async fn populate_posts(
-    sub_map: &HashMap<String, Vec<String>>,
+    subs: &'static HashMap<String, Vec<String>>,
 ) -> Arc<DashMap<String, Vec<QuickPost>>> {
     info!("populating subreddit post data...");
-    info!(?sub_map);
+    info!(subreddits = ?subs);
     let timer = Instant::now();
 
-    let subs = sub_map.values().flatten().collect::<Vec<_>>();
+    let subs = subs.values().flatten().collect::<Vec<_>>();
     let posts = Arc::new(DashMap::with_capacity(subs.len()));
 
     future::join_all(
         subs.into_iter()
-            .map(|sub| get_hot_posts(sub, Arc::clone(&posts))),
+            .map(|sub| tokio::spawn(get_hot_posts(sub, Arc::clone(&posts)))),
     )
     .await;
 
@@ -168,7 +166,7 @@ pub async fn populate_posts(
     posts
 }
 
-/// Retrieve the top 100 hot posts for the specified subreddit and store them as `QuickPost`s.
+/// Retrieve the first 100 hot posts for the specified subreddit and store them as `QuickPost`s.
 #[tracing::instrument(skip_all, fields(subreddit = %sub_name))]
 async fn get_hot_posts(sub_name: &str, posts: Arc<DashMap<String, Vec<QuickPost>>>) {
     let sub = Subreddit::new(sub_name);

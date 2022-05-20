@@ -1,4 +1,4 @@
-//! Poise framework data
+//! Bot runtime data
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use mongodb::{Client, Database};
 use poise::serenity_prelude::ChannelId;
-use roux::responses::BasicThing;
 use roux::subreddit::responses::Submissions;
 
 use crate::db::ChannelInfo;
@@ -58,24 +57,12 @@ pub struct QuickPost {
 impl Data {
     /// Add reddit posts to the cache.
     #[inline]
-    pub fn add_posts(&mut self, sub: &str, posts: &mut Vec<QuickPost>) {
+    pub fn add_posts(&mut self, sub: String, posts: Vec<QuickPost>) {
         let mut entry = self
             .posts
             .entry(sub.to_string())
             .or_insert(Vec::with_capacity(posts.len()));
-        (*entry).append(&mut posts);
-    }
-
-    /// Clear the cached reddit posts, keeping the allocated memory.
-    #[inline]
-    pub fn clear_posts(&mut self) {
-        self.posts.clear();
-    }
-
-    /// Clear the blacklist, keeping the allocated memory.
-    #[inline]
-    pub fn clear_blacklist(&mut self) {
-        self.blacklist.clear();
+        (*entry).extend(posts);
     }
 }
 
@@ -86,13 +73,9 @@ pub fn submissions_to_quickposts(submissions: &Submissions) -> Vec<QuickPost> {
         .children
         .iter()
         .map(|submission| {
-            let BasicThing { data, .. } = submission;
-
+            let data = submission.data;
             // For a link or media post, use the content URL, otherwise use selftext
-            let content = match data.url {
-                Some(url) => url,
-                None => data.selftext.clone(),
-            };
+            let content = data.url.unwrap_or_else(|| data.selftext.clone());
 
             QuickPost {
                 title: data.title.clone(),
