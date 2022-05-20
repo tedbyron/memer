@@ -4,9 +4,12 @@
 use std::env;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{Error, Result};
-use chrono::offset::Utc;
+use chrono::Utc;
+use dashmap::DashMap;
+use governor::{Quota, RateLimiter};
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
 use tokio::time::Instant;
@@ -74,22 +77,25 @@ async fn run() -> Result<()> {
 
                     info!("logged in as {} on {} servers", user.tag(), guilds.len());
 
-                    let (mongo, db) = db::client_and_db().await?;
-                    let subs = setup::subs_from_file()?;
-                    let channels = db::channels(&db).await?;
-
-                    let cache_time = Utc::now();
-                    let posts = setup::populate_posts(&subs).await;
-
                     setup::invite_url(ctx, ready).await;
                     setup::set_activity(ctx).await;
                     setup::register_commands(ctx, framework, guilds).await;
 
-                    let blacklist_time = Utc::now();
+                    let subs = setup::subs_from_file()?;
+                    let (mongo, db) = db::client_and_db().await?;
+                    let channels = db::channels(&db).await?;
 
-                    info!("done in {}", humantime::Duration::from(timer.elapsed()));
+                    let posts = setup::populate_posts(&subs).await;
+                    let cache_time = Utc::now() + Duration::from_secs(3600).into();
 
-                    Ok(Data {
+                    let blacklist = Arc::new(DashMap::new());
+                    let blacklist_time = Utc::now() + Duration::from_secs(3600 * 3).into();
+
+                    let governor = Arc::new(RateLimiter::keyed(Quota::per_minute(
+                        10.try_into().unwrap(),
+                    )));
+
+                    let data = Data {
                         bot_id: user.id.0,
                         bot_name: user.name.to_string(),
                         bot_tag: user.tag(),
@@ -100,16 +106,18 @@ async fn run() -> Result<()> {
                         cache_time,
                         blacklist_time,
 
-                        channels,
                         subs,
                         posts,
+
+                        channels,
                         blacklist,
                         last_post,
 
-                        request_count,
-                        req_timer,
-                        queue_state,
-                    })
+                        governor,
+                    };
+
+                    info!("done in {}", humantime::format_duration(timer.elapsed()));
+                    Ok(data)
                 }
                 .instrument(info_span!("setup")),
             )

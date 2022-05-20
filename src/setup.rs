@@ -141,7 +141,7 @@ pub async fn register_commands<I>(
     }))
     .await;
 
-    info!("done in {}", humantime::Duration::from(timer.elapsed()));
+    info!("done in {}", humantime::format_duration(timer.elapsed()));
 }
 
 /// Get the first 100 hot posts for all subreddits.
@@ -162,7 +162,7 @@ pub async fn populate_posts(
     )
     .await;
 
-    info!("done in {}", humantime::Duration::from(timer.elapsed()));
+    info!("done in {}", humantime::format_duration(timer.elapsed()));
     posts
 }
 

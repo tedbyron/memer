@@ -7,9 +7,8 @@ Based on [chand1012/Discord-Quick-Meme](https://github.com/chand1012/Discord-Qui
 
 # Dev
 
-`.env`:
-
 ```sh
+# .env
 MEMER_TOKEN=
 MEMER_APPLICATION_ID=
 
