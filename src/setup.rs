@@ -1,4 +1,4 @@
-//! Utility functions
+//! Setup functions
 
 use std::collections::HashMap;
 use std::sync::Arc;

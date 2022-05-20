@@ -1,3 +1,5 @@
+//! Serde support for serenity's `ChannelId`
+
 use poise::serenity_prelude::ChannelId;
 use serde::de::{self, Visitor};
 use serde::{Deserializer, Serializer};
