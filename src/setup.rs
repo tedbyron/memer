@@ -167,16 +167,16 @@ pub async fn populate_posts(
 }
 
 /// Retrieve the first 100 hot posts for the specified subreddit and store them as `QuickPost`s.
-#[tracing::instrument(skip_all, fields(subreddit = %sub_name))]
-async fn get_hot_posts(sub_name: &str, posts: Arc<DashMap<String, Vec<QuickPost>>>) {
-    let sub = Subreddit::new(sub_name);
-    let hot = match sub.hot(100, None).await {
+#[tracing::instrument(skip_all, fields(subreddit = %sub))]
+async fn get_hot_posts(sub: &str, posts: Arc<DashMap<String, Vec<QuickPost>>>) {
+    let subreddit = Subreddit::new(&sub);
+    let hot = match subreddit.hot(100, None).await {
         Ok(hot) => hot,
         Err(_) => {
-            error!("failed to get hot posts for {sub_name}");
+            error!("failed to get hot posts for {sub}");
             return;
         }
     };
 
-    posts.insert(sub_name.to_string(), data::submissions_to_quickposts(&hot));
+    posts.insert(sub.to_string(), data::submissions_to_quickposts(&hot));
 }

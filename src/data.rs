@@ -60,7 +60,7 @@ impl Data {
     pub fn add_posts(&mut self, sub: String, posts: Vec<QuickPost>) {
         let mut entry = self
             .posts
-            .entry(sub.to_string())
+            .entry(sub)
             .or_insert(Vec::with_capacity(posts.len()));
         (*entry).extend(posts);
     }
