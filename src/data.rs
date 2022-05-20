@@ -48,6 +48,7 @@ pub type SubMap = DashMap<String, Vec<String>>;
 
 impl Data {
     /// Add reddit posts to the cache.
+    #[inline]
     pub fn add_posts(&mut self, sub: &str, posts: &mut Vec<QuickPost>) {
         let mut entry = self
             .posts
@@ -57,8 +58,15 @@ impl Data {
     }
 
     /// Clear the cached reddit posts, keeping the allocated memory.
+    #[inline]
     pub fn clear_posts(&mut self) {
         self.posts.clear();
+    }
+
+    /// Clear the blacklist, keeping the allocated memory.
+    #[inline]
+    pub fn clear_blacklist(&mut self) {
+        self.blacklist.clear();
     }
 }
 

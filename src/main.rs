@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Error, Result};
 use chrono::offset::Utc;
+use dashmap::DashMap;
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
 use tokio::time::Instant;
@@ -77,29 +78,24 @@ async fn run() -> Result<()> {
             Box::pin(
                 async move {
                     info!("starting...");
-                    let setup_timer = Instant::now();
-
+                    let timer = Instant::now();
                     let Ready { user, guilds, .. } = ready;
-                    let guild_ids = guilds.iter().map(|guild| &guild.id);
 
-                    info!(guilds = ?guild_ids.clone().map(|id| id.0).collect::<Vec<_>>());
-                    info!("logged in as {}", user.tag());
+                    info!("logged in as {} on {} servers", user.tag(), guilds.len());
 
                     let bot_name = user.name.to_string();
                     let bot_tag = user.tag();
 
                     let cache_time = Utc::now();
                     let posts = setup::populate_posts(&subs).await;
-                    let blacklist_time = Utc::now();
 
                     setup::invite_url(ctx, ready).await;
                     setup::set_activity(ctx).await;
-                    setup::register_commands(ctx, framework, guild_ids).await;
+                    setup::register_commands(ctx, framework, guilds).await;
 
-                    info!(
-                        "done in {}",
-                        humantime::Duration::from(setup_timer.elapsed())
-                    );
+                    let blacklist_time = Utc::now();
+
+                    info!("done in {}", humantime::Duration::from(timer.elapsed()));
 
                     Ok(Data {
                         bot_name,
@@ -114,7 +110,7 @@ async fn run() -> Result<()> {
                         subs,
                         nsfw,
                         posts,
-                        blacklist,
+                        blacklist: Arc::new(DashMap::new()),
                         last_post,
 
                         request_count,

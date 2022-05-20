@@ -15,7 +15,7 @@ use tokio::time::Instant;
 use tracing::{error, info, warn};
 
 use crate::data::{self, QuickPost, SubMap};
-use crate::{Data, TraceErr};
+use crate::Data;
 
 /// Get and validate the bot token.
 #[tracing::instrument]
@@ -121,23 +121,23 @@ pub fn subs_from_file() -> Result<SubMap> {
 /// Register application commands on all servers.
 #[tracing::instrument(skip_all)]
 pub async fn register_commands<I>(
-    ctx: &'static Context,
-    framework: &'static Framework<Data, Error>,
-    guild_ids: I,
-) where
-    I: Iterator<Item = &'static GuildId>,
-{
+    ctx: &Context,
+    framework: &Framework<Data, Error>,
+    guilds: &[UnavailableGuild],
+) {
+    info!("registering application commands on all servers...");
     let timer = Instant::now();
 
-    future::join_all(guild_ids.map(|guild_id| {
-        guild_id
+    future::join_all(guilds.iter().map(|guild| {
+        guild
+            .id
             .set_application_commands(ctx, |commands| {
                 *commands = create_application_commands(&framework.options().commands);
                 commands
             })
             .inspect(|res| {
                 if res.is_err() {
-                    error!("failed to set applications for guild: {}", guild_id.clone())
+                    error!("failed to set applications for guild: {}", guild.id)
                 }
             })
     }))
