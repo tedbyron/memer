@@ -7,11 +7,10 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Error, Result};
 use chrono::offset::Utc;
-use dashmap::DashMap;
-use poise::builtins::create_application_commands;
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
-use tracing::{error, info, info_span, trace};
+use tokio::time::Instant;
+use tracing::{error, info, info_span, trace, Instrument};
 use tracing_subscriber::EnvFilter;
 
 mod commands;
@@ -19,7 +18,7 @@ mod common;
 mod data;
 mod db;
 mod error;
-mod utils;
+mod setup;
 
 pub use common::Respond;
 use data::Data;
@@ -53,15 +52,12 @@ async fn run() -> Result<()> {
     trace!(command = %env::args().collect::<Vec<_>>().join(" "));
 
     // Framework values
-    let token = utils::token()?;
-    let app_id = utils::app_id()?;
+    let token = setup::token()?;
+    let app_id = setup::app_id()?;
 
     // User data values
     let (mongo, db) = db::client().await?;
-    let subs = data::subs_from_file()?;
-    let cache_time = Utc::now();
-    let posts = data::all_posts(&subs).await;
-    let blacklist_time = Utc::now();
+    let subs = setup::subs_from_file()?;
 
     // Framework options
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
@@ -78,59 +74,56 @@ async fn run() -> Result<()> {
         .client_settings(move |client| client.application_id(app_id))
         .intents(GatewayIntents::GUILD_MESSAGES)
         .user_data_setup(|ctx, ready, framework| {
-            let Ready { user, guilds, .. } = ready;
+            Box::pin(
+                async move {
+                    info!("starting...");
+                    let setup_timer = Instant::now();
 
-            let guild_ids = guilds.iter().map(|g| g.id);
+                    let Ready { user, guilds, .. } = ready;
+                    let guild_ids = guilds.iter().map(|guild| &guild.id);
 
-            info!(guilds = ?guild_ids.clone().map(|id| id.0).collect::<Vec<_>>());
-            info!("logged in as {}", user.tag());
+                    info!(guilds = ?guild_ids.clone().map(|id| id.0).collect::<Vec<_>>());
+                    info!("logged in as {}", user.tag());
 
-            let bot_name = user.name.to_string();
-            let bot_tag = user.tag();
+                    let bot_name = user.name.to_string();
+                    let bot_tag = user.tag();
 
-            Box::pin(async move {
-                let span = info_span!("setup");
-                let span_guard = span.enter();
+                    let cache_time = Utc::now();
+                    let posts = setup::populate_posts(&subs).await;
+                    let blacklist_time = Utc::now();
 
-                utils::invite_url(ctx, ready).await;
-                utils::set_activity(ctx).await;
+                    setup::invite_url(ctx, ready).await;
+                    setup::set_activity(ctx).await;
+                    setup::register_commands(ctx, framework, guild_ids).await;
 
-                info!("registering application commands on all servers...");
+                    info!(
+                        "done in {}",
+                        humantime::Duration::from(setup_timer.elapsed())
+                    );
 
-                for guild_id in guild_ids {
-                    guild_id
-                        .set_application_commands(ctx, |commands| {
-                            *commands = create_application_commands(&framework.options().commands);
-                            commands
-                        })
-                        .await
-                        .or_trace();
+                    Ok(Data {
+                        bot_name,
+                        bot_tag,
+
+                        mongo,
+                        db,
+
+                        cache_time,
+                        blacklist_time,
+
+                        subs,
+                        nsfw,
+                        posts,
+                        blacklist,
+                        last_post,
+
+                        request_count,
+                        req_timer,
+                        queue_state,
+                    })
                 }
-
-                info!("finished registering application commands");
-                drop(span_guard);
-
-                Ok(Data {
-                    bot_name,
-                    bot_tag,
-
-                    mongo,
-                    db,
-
-                    cache_time,
-                    blacklist_time,
-
-                    subs,
-                    nsfw,
-                    posts,
-                    blacklist,
-                    last_post,
-
-                    request_count,
-                    req_timer,
-                    queue_state,
-                })
-            })
+                .instrument(info_span!("setup")),
+            )
         })
         .options(options)
         .build()

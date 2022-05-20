@@ -2,17 +2,12 @@
 
 use std::sync::Arc;
 use std::time::Duration;
-use std::{env, fs};
 
-use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use mongodb::{Client, Database};
-use poise::futures_util::future;
 use roux::responses::BasicThing;
 use roux::subreddit::responses::Submissions;
-use roux::subreddit::Subreddit;
-use tracing::error;
 
 #[derive(Debug)]
 pub struct Data {
@@ -30,13 +25,14 @@ pub struct Data {
     pub posts: Arc<DashMap<String, Vec<QuickPost>>>,
     pub blacklist: Arc<DashMap<String, Vec<QuickPost>>>,
     pub last_post: Arc<DashMap<String, QuickPost>>,
-    pub subs: Subs,
+    pub subs: SubMap,
 
     pub request_count: DashMap<String, u8>,
     pub req_timer: DashMap<String, Duration>,
     pub queue_state: DashMap<String, bool>,
 }
 
+/// Specific data for a reddit post.
 #[derive(Debug)]
 pub struct QuickPost {
     pub title: String,
@@ -47,9 +43,11 @@ pub struct QuickPost {
     pub sub: String,
 }
 
-pub type Subs = DashMap<String, Vec<String>>;
+/// Map of subreddit genres and subreddit names.
+pub type SubMap = DashMap<String, Vec<String>>;
 
 impl Data {
+    /// Add reddit posts to the cache.
     pub fn add_posts(&mut self, sub: &str, posts: &mut Vec<QuickPost>) {
         let mut entry = self
             .posts
@@ -58,53 +56,10 @@ impl Data {
         (*entry).append(&mut posts);
     }
 
+    /// Clear the cached reddit posts, keeping the allocated memory.
     pub fn clear_posts(&mut self) {
-        self.posts = Arc::new(DashMap::with_capacity(self.subs.len()));
+        self.posts.clear();
     }
-}
-
-/// Load subreddits from `subs.json`.
-pub fn subs_from_file() -> Result<Subs> {
-    let path = env::current_dir()
-        .context("failed to get cwd")?
-        .join("subs.json");
-    let contents = fs::read_to_string(path)
-        .with_context(|| &format!("failed to read file: {}", path.display()))?;
-    let subs = serde_json::from_str::<Subs>(&contents)
-        .with_context(|| format!("failed to deserialize file: {}", path.display()))?;
-
-    Ok(subs)
-}
-
-/// Get the top 25 hot posts for all subreddits.
-pub async fn hot_posts(subs: &Subs) -> Arc<DashMap<String, Vec<QuickPost>>> {
-    let subs = subs.clone().into_read_only();
-    let subs = subs.values().flatten().collect::<Vec<_>>();
-    let len = subs.len();
-    let posts = Arc::new(DashMap::with_capacity(len));
-
-    future::join_all(subs.into_iter().map(|sub| get_hot(sub, Arc::clone(&posts)))).await;
-
-    posts
-}
-
-/// Retrieve the top 25 hot reddit posts for the specified subreddit, and store them as `QuickPost`s
-/// in a map.
-async fn get_hot<S>(sub_name: S, posts: Arc<DashMap<String, Vec<QuickPost>>>)
-where
-    S: AsRef<str>,
-{
-    let sub_name = sub_name.as_ref();
-    let sub = Subreddit::new(sub_name);
-    let hot = match sub.hot(25, None).await {
-        Ok(hot) => hot,
-        Err(_) => {
-            error!("failed to get hot posts for {sub_name}");
-            return;
-        }
-    };
-
-    posts.insert(sub_name.to_string(), submissions_to_quickposts(&hot));
 }
 
 /// Convert reddit posts (submissions) to `QuickPost`s.

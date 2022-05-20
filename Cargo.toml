@@ -22,10 +22,11 @@ serde = { version = "1.0.137", features = ["derive"] }
 dashmap = { version = "5.3.3", features = ["serde"] }
 serde_json = "1.0.81"
 chrono = "0.4.19"
+humantime = "2.1.0"
 
 [dependencies.tokio]
 version = "1.18.2"
-features = ["rt-multi-thread", "macros", "signal", "parking_lot"]
+features = ["rt-multi-thread", "macros", "signal", "parking_lot", "time"]
 
 [dependencies.tracing-subscriber]
 version = "0.3.11"
