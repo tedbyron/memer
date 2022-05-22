@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use std::{env, fs};
 
 use anyhow::{bail, Context as _, Error, Result};
@@ -11,7 +12,6 @@ use poise::futures_util::future;
 use poise::serenity_prelude::*;
 use poise::Framework;
 use roux::Subreddit;
-use tokio::time::Instant;
 use tracing::{error, info, warn};
 
 use crate::data::{self, QuickPost};
@@ -106,8 +106,8 @@ pub fn subs_from_file() -> Result<HashMap<String, Vec<String>>> {
     let path = env::current_dir()
         .context("failed to get cwd")?
         .join("subs.json");
-    let contents = fs::read_to_string(path)
-        .with_context(|| &format!("failed to read file: {}", path.display()))?;
+    let contents = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read file: {}", path.display()))?;
     let subs = serde_json::from_str::<HashMap<String, Vec<String>>>(&contents)
         .with_context(|| format!("failed to deserialize file: {}", path.display()))?;
 
@@ -116,51 +116,43 @@ pub fn subs_from_file() -> Result<HashMap<String, Vec<String>>> {
 
 /// Register application commands on all servers.
 #[tracing::instrument(skip_all)]
-pub async fn register_commands<I>(
-    ctx: &'static Context,
-    framework: &'static Framework<Data, Error>,
-    guilds: &'static [UnavailableGuild],
+pub async fn register_commands(
+    ctx: &Context,
+    framework: &Framework<Data, Error>,
+    guilds: &[UnavailableGuild],
 ) {
     info!("registering application commands on all servers...");
     let timer = Instant::now();
 
-    future::join_all(guilds.iter().map(|guild| {
-        tokio::spawn(
-            guild
-                .id
-                .set_application_commands(ctx, |commands| {
-                    *commands = create_application_commands(&framework.options().commands);
-                    commands
-                })
-                .inspect(|res| {
-                    if res.is_err() {
-                        error!("failed to set applications for guild: {}", guild.id)
-                    }
-                }),
-        )
-    }))
-    .await;
+    // FIXME: probably some way turn this loop into tasks
+    for guild_id in guilds.iter().map(|guild| guild.id) {
+        let res = guild_id
+            .set_application_commands(ctx, |commands| {
+                *commands = create_application_commands(&framework.options().commands);
+                commands
+            })
+            .await;
+
+        if res.is_err() {
+            error!("failed to set applications for guild: {}", guild_id);
+        }
+    }
 
     info!("done in {}", humantime::format_duration(timer.elapsed()));
 }
 
-/// Get the first 100 hot posts for all subreddits.
+/// Get the first 100 hot posts for all subreddits in `data::SUBS`.
 #[tracing::instrument(skip_all)]
-pub async fn populate_posts(
-    subs: &'static HashMap<String, Vec<String>>,
-) -> Arc<DashMap<String, Vec<QuickPost>>> {
+pub async fn all_hot_posts() -> Arc<DashMap<String, Vec<QuickPost>>> {
     info!("populating subreddit post data...");
-    info!(subreddits = ?subs);
     let timer = Instant::now();
 
-    let subs = subs.values().flatten().collect::<Vec<_>>();
-    let posts = Arc::new(DashMap::with_capacity(subs.len()));
+    // Unwrap: data::SUBS is set in the user_data_setup function before this gets called
+    let subs = data::SUBS.get().unwrap().values().flatten();
+    let (lo, hi) = subs.size_hint();
+    let posts = Arc::new(DashMap::with_capacity(hi.unwrap_or(lo)));
 
-    future::join_all(
-        subs.into_iter()
-            .map(|sub| tokio::spawn(get_hot_posts(sub, Arc::clone(&posts)))),
-    )
-    .await;
+    future::join_all(subs.map(|sub| tokio::spawn(hot_posts(sub, Arc::clone(&posts))))).await;
 
     info!("done in {}", humantime::format_duration(timer.elapsed()));
     posts
@@ -168,8 +160,8 @@ pub async fn populate_posts(
 
 /// Retrieve the first 100 hot posts for the specified subreddit and store them as `QuickPost`s.
 #[tracing::instrument(skip_all, fields(subreddit = %sub))]
-async fn get_hot_posts(sub: &str, posts: Arc<DashMap<String, Vec<QuickPost>>>) {
-    let subreddit = Subreddit::new(&sub);
+async fn hot_posts(sub: &str, posts: Arc<DashMap<String, Vec<QuickPost>>>) {
+    let subreddit = Subreddit::new(sub);
     let hot = match subreddit.hot(100, None).await {
         Ok(hot) => hot,
         Err(_) => {

@@ -7,6 +7,7 @@ pub mod channel_id {
     use serde::{Deserializer, Serializer};
 
     /// Serialize a `ChannelId`'s inner value (u64) into a string.
+    #[allow(clippy::trivially_copy_pass_by_ref)] // Required by serde
     pub fn serialize<S: Serializer>(
         channel_id: &ChannelId,
         serializer: S,

@@ -4,15 +4,14 @@
 use std::env;
 use std::process::ExitCode;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::Instant;
 
 use anyhow::{Error, Result};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use dashmap::DashMap;
 use governor::{Quota, RateLimiter};
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
-use tokio::time::Instant;
 use tracing::{error, info, info_span, trace, Instrument};
 use tracing_subscriber::EnvFilter;
 
@@ -81,17 +80,20 @@ async fn run() -> Result<()> {
                     setup::set_activity(ctx).await;
                     setup::register_commands(ctx, framework, guilds).await;
 
-                    let subs = setup::subs_from_file()?;
+                    // Unwrap: any invalid value will cause an error which is propagated
+                    data::SUBS.set(setup::subs_from_file()?).unwrap();
                     let (mongo, db) = db::client_and_db().await?;
                     let channels = db::channels(&db).await?;
 
-                    let posts = setup::populate_posts(&subs).await;
-                    let cache_time = Utc::now() + Duration::from_secs(3600).into();
+                    let posts = setup::all_hot_posts().await;
+                    let cache_time = Utc::now() + Duration::hours(1);
 
                     let blacklist = Arc::new(DashMap::new());
-                    let blacklist_time = Utc::now() + Duration::from_secs(3600 * 3).into();
+                    let blacklist_time = Utc::now() + Duration::hours(3);
 
+                    let last_post = Arc::new(DashMap::new());
                     let governor = Arc::new(RateLimiter::keyed(Quota::per_minute(
+                        // Unwrap: 10_u32 is a valid NonZeroU32
                         10.try_into().unwrap(),
                     )));
 
@@ -106,7 +108,6 @@ async fn run() -> Result<()> {
                         cache_time,
                         blacklist_time,
 
-                        subs,
                         posts,
 
                         channels,

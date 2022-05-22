@@ -1,8 +1,6 @@
 //! Bot runtime data
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{collections::HashMap, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
@@ -10,10 +8,14 @@ use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::RateLimiter;
 use mongodb::{Client, Database};
+use once_cell::sync::OnceCell;
 use poise::serenity_prelude::ChannelId;
 use roux::subreddit::responses::Submissions;
 
 use crate::db::ChannelInfo;
+
+/// Map of subreddit groups and subreddit names from `subs.json`.
+pub static SUBS: OnceCell<HashMap<String, Vec<String>>> = OnceCell::new();
 
 #[derive(Debug)]
 pub struct Data {
@@ -29,11 +31,11 @@ pub struct Data {
     /// The default mongo database.
     pub db: Database,
 
-    cache_time: DateTime<Utc>,
-    blacklist_time: DateTime<Utc>,
+    /// The last time posts were updated.
+    pub cache_time: DateTime<Utc>,
+    /// The last time the blacklist was reset.
+    pub blacklist_time: DateTime<Utc>,
 
-    /// Map of subreddit groups and subreddit names.
-    pub subs: HashMap<String, Vec<String>>,
     /// Map of subreddit names and their top 100 hot posts.
     pub posts: Arc<DashMap<String, Vec<QuickPost>>>,
 
@@ -82,8 +84,7 @@ impl Data {
     // #[inline]
     // fn reset_blacklist(&mut self) {
     //     self.blacklist = Arc::new(DashMap::new());
-    //     self.blacklist_time =
-    //         Utc::now() + chrono::Duration::from_std(Duration::from_secs(3600 * 3)).unwrap();
+    //     self.blacklist_time = Utc::now() + Duration::hours(3);
     // }
 
     // /// Update the blacklist time and reset the blacklist if the current time is greater than the
@@ -103,9 +104,12 @@ pub fn submissions_to_quickposts(submissions: &Submissions) -> Vec<QuickPost> {
         .children
         .iter()
         .map(|submission| {
-            let data = submission.data;
+            let data = &submission.data;
             // For a link or media post, use the content URL, otherwise use selftext
-            let content = data.url.unwrap_or_else(|| data.selftext.clone());
+            let content = data
+                .url
+                .as_ref()
+                .map_or_else(|| data.selftext.clone(), ToString::to_string);
 
             QuickPost {
                 title: data.title.clone(),
