@@ -1,8 +1,11 @@
 //! Bot runtime data
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use anyhow::Result;
+use chrono::{DateTime, Duration, Utc};
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
@@ -12,7 +15,7 @@ use once_cell::sync::OnceCell;
 use poise::serenity_prelude::ChannelId;
 use roux::subreddit::responses::Submissions;
 
-use crate::db::ChannelInfo;
+use crate::db::{Channel, ChannelInfo};
 
 /// Map of subreddit groups and subreddit names from `subs.json`.
 pub static SUBS: OnceCell<HashMap<String, Vec<String>>> = OnceCell::new();
@@ -62,39 +65,53 @@ pub struct QuickPost {
 }
 
 impl Data {
-    // /// Add reddit posts to the cache.
-    // #[inline]
-    // fn add_posts(&mut self, sub: String, posts: Vec<QuickPost>) {
-    //     self.posts
-    //         .entry(sub)
-    //         .and_modify(|v| v.extend(posts))
-    //         .or_insert(posts);
-    // }
+    /// Add `QuickPost`s to the cache.
+    #[inline]
+    pub fn add_posts(&mut self, sub: String, posts: Vec<QuickPost>) {
+        match self.posts.entry(sub) {
+            Entry::Occupied(ref mut entry) => entry.get_mut().extend(posts),
+            Entry::Vacant(entry) => {
+                entry.insert(posts);
+            }
+        }
+    }
 
-    // /// Add a reddit post to the blacklist.
-    // #[inline]
-    // fn add_blacklist(&mut self, channel: ChannelId, post: QuickPost) {
-    //     self.blacklist
-    //         .entry(channel)
-    //         .and_modify(|v| v.push(post))
-    //         .or_insert(vec![post]);
-    // }
+    /// Add a `QuickPost` to the blacklist.
+    #[inline]
+    pub fn add_blacklist(&mut self, channel: ChannelId, post: QuickPost) {
+        match self.blacklist.entry(channel) {
+            Entry::Occupied(ref mut entry) => entry.get_mut().push(post),
+            Entry::Vacant(entry) => {
+                entry.insert(vec![post]);
+            }
+        }
+    }
 
-    // /// Reset the blacklist and the blacklist time.
-    // #[inline]
-    // fn reset_blacklist(&mut self) {
-    //     self.blacklist = Arc::new(DashMap::new());
-    //     self.blacklist_time = Utc::now() + Duration::hours(3);
-    // }
+    /// Reset the blacklist and the blacklist time.
+    #[inline]
+    pub fn reset_blacklist(&mut self) {
+        self.blacklist = Arc::new(DashMap::new());
+        self.blacklist_time = Utc::now() + Duration::hours(3);
+    }
 
-    // /// Update the blacklist time and reset the blacklist if the current time is greater than the
-    // /// original blacklist time.
-    // #[inline]
-    // fn update_blacklist_time(&mut self) {
-    //     if Utc::now() >= self.blacklist_time {
-    //         self.reset_blacklist();
-    //     }
-    // }
+    /// Update the blacklist time and reset the blacklist if the current time is greater than the
+    /// original blacklist time.
+    #[inline]
+    pub fn update_blacklist_time(&mut self) {
+        if Utc::now() >= self.blacklist_time {
+            self.reset_blacklist();
+        }
+    }
+
+    /// Add channel info to the database.
+    #[inline]
+    pub async fn add_db_channel(&mut self, channel: ChannelId) -> Result<()> {
+        let mut cursor = self.db.collection::<Channel>("channels");
+
+        // TODO
+
+        Ok(())
+    }
 }
 
 /// Convert reddit posts (submissions) to `QuickPost`s.

@@ -22,7 +22,7 @@ pub struct Channel {
     #[serde(flatten)]
     pub info: ChannelInfo,
     pub time: i64,
-    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "_id", skip_serializing)]
     pub id: Option<ObjectId>,
 }
 
@@ -39,7 +39,7 @@ pub struct BannedSub {
     #[serde(rename = "channel", with = "crate::serde::channel_id")]
     pub channel_id: ChannelId,
     pub subreddit: String,
-    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "_id", skip_serializing)]
     pub id: Option<ObjectId>,
 }
 
@@ -65,7 +65,8 @@ pub async fn client_and_db() -> Result<(Client, Database)> {
 
 /// Get all active channels' info from the database.
 #[tracing::instrument(skip_all)]
-pub async fn channels(db: &Database) -> Result<Arc<DashMap<ChannelId, ChannelInfo>>> {
+pub async fn all_channels(db: &Database) -> Result<Arc<DashMap<ChannelId, ChannelInfo>>> {
+    // TODO: explicitly type collection if there are no errors deserializing
     let mut cursor = db.collection("channels").find(None, None).await?;
     let (lo, hi) = cursor.size_hint();
     let size = hi.unwrap_or(lo);
@@ -81,27 +82,6 @@ pub async fn channels(db: &Database) -> Result<Arc<DashMap<ChannelId, ChannelInf
             }
         }
     }
-
-    // // Spawn tasks instead of waiting for items in the stream
-    // let handles = cursor
-    //     .map(|res| {
-    //         let channels = Arc::clone(&channels);
-
-    //         tokio::spawn(async move {
-    //             if let Ok(doc) = res {
-    //                 match bson::from_bson::<Channel>(Bson::Document(doc)) {
-    //                     Ok(channel) => {
-    //                         channels.insert(channel.channel_id, channel.info);
-    //                     }
-    //                     Err(e) => error!("failed to deserialize channel from bson: {e}"),
-    //                 }
-    //             }
-    //         })
-    //     })
-    //     .collect::<Vec<_>>()
-    //     .await;
-
-    // future::join_all(handles).await;
 
     Ok(channels)
 }

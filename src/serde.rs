@@ -7,7 +7,7 @@ pub mod channel_id {
     use serde::{Deserializer, Serializer};
 
     /// Serialize a `ChannelId`'s inner value (u64) into a string.
-    #[allow(clippy::trivially_copy_pass_by_ref)] // Required by serde
+    #[allow(clippy::trivially_copy_pass_by_ref)] // Ref required by serde
     pub fn serialize<S: Serializer>(
         channel_id: &ChannelId,
         serializer: S,
@@ -33,10 +33,12 @@ pub mod channel_id {
         where
             E: de::Error,
         {
-            let id = v
-                .parse::<u64>()
-                .map_err(|_| E::custom(format!("channel ID cannot be parsed as a u64: {v}")))?;
-            Ok(ChannelId::from(id))
+            match v.parse::<u64>() {
+                Ok(id) => Ok(ChannelId::from(id)),
+                Err(_) => Err(E::custom(format!(
+                    "channel ID cannot be parsed as a u64: {v}"
+                ))),
+            }
         }
     }
 }

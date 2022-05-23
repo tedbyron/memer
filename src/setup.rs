@@ -106,9 +106,9 @@ pub fn subs_from_file() -> Result<HashMap<String, Vec<String>>> {
     let path = env::current_dir()
         .context("failed to get cwd")?
         .join("subs.json");
-    let contents = fs::read_to_string(&path)
+    let buf = fs::read_to_string(&path)
         .with_context(|| format!("failed to read file: {}", path.display()))?;
-    let subs = serde_json::from_str::<HashMap<String, Vec<String>>>(&contents)
+    let subs = serde_json::from_str::<HashMap<String, Vec<String>>>(&buf)
         .with_context(|| format!("failed to deserialize file: {}", path.display()))?;
 
     Ok(subs)
@@ -134,7 +134,7 @@ pub async fn register_commands(
             .await;
 
         if res.is_err() {
-            error!("failed to set applications for guild: {}", guild_id);
+            error!("failed to set application commands for guild: {}", guild_id);
         }
     }
 

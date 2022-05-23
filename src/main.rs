@@ -67,6 +67,7 @@ async fn run() -> Result<()> {
         .token(token)
         .client_settings(move |client| client.application_id(app_id))
         .intents(GatewayIntents::GUILD_MESSAGES)
+        .options(options)
         .user_data_setup(|ctx, ready, framework| {
             Box::pin(
                 async move {
@@ -80,10 +81,10 @@ async fn run() -> Result<()> {
                     setup::set_activity(ctx).await;
                     setup::register_commands(ctx, framework, guilds).await;
 
-                    // Unwrap: any invalid value will cause an error which is propagated
+                    // Unwrap: any invalid value will cause an error to propagate
                     data::SUBS.set(setup::subs_from_file()?).unwrap();
                     let (mongo, db) = db::client_and_db().await?;
-                    let channels = db::channels(&db).await?;
+                    let channels = db::all_channels(&db).await?;
 
                     let posts = setup::all_hot_posts().await;
                     let cache_time = Utc::now() + Duration::hours(1);
@@ -123,11 +124,11 @@ async fn run() -> Result<()> {
                 .instrument(info_span!("setup")),
             )
         })
-        .options(options)
         .build()
         .await?;
 
     let shard_mgr = Arc::clone(&framework.shard_manager());
+
     tokio::spawn(async move {
         match tokio::signal::ctrl_c().await {
             Ok(_) => shard_mgr.lock().await.shutdown_all().await,
