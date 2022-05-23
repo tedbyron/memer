@@ -170,5 +170,5 @@ async fn hot_posts(sub: &str, posts: Arc<DashMap<String, Vec<QuickPost>>>) {
         }
     };
 
-    posts.insert(sub.to_string(), data::submissions_to_quickposts(&hot));
+    posts.insert(sub.to_string(), data::submissions_to_quickposts(hot));
 }

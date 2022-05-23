@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
@@ -10,6 +11,7 @@ use dashmap::DashMap;
 use governor::clock::DefaultClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::RateLimiter;
+use mongodb::bson::doc;
 use mongodb::{Client, Database};
 use once_cell::sync::OnceCell;
 use poise::serenity_prelude::ChannelId;
@@ -105,36 +107,75 @@ impl Data {
 
     /// Add channel info to the database.
     #[inline]
-    pub async fn add_db_channel(&mut self, channel: ChannelId) -> Result<()> {
-        let mut cursor = self.db.collection::<Channel>("channels");
+    pub async fn add_db_channel(&mut self, channel: ChannelId, info: ChannelInfo) -> Result<()> {
+        let channels = self.db.collection::<Channel>("channels");
+        let channel_id = channel.0.to_string();
+        let filter = doc! {
+            "$or": {
+                "channelID": &channel_id,
+                "channelid": &channel_id,
+            }
+        };
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap() // Unwrap: system time should be greater than unix epoch time
+            .as_secs() as i64;
 
-        // TODO
+        // TODO: find_one_and_update
+        match channels.find_one(filter.clone(), None).await? {
+            Some(_) => {
+                channels
+                    .update_one(
+                        filter,
+                        doc! {
+                            "$set": {
+                                "channelID": &channel_id,
+                                "name": &info.name,
+                                "nsfw": &info.nsfw,
+                                "time": time
+                            }
+                        },
+                        None,
+                    )
+                    .await?;
+            }
+            None => {
+                channels
+                    .insert_one(
+                        Channel {
+                            channel_id: channel,
+                            info,
+                            time,
+                            id: None,
+                        },
+                        None,
+                    )
+                    .await?;
+            }
+        };
 
         Ok(())
     }
 }
 
 /// Convert reddit posts (submissions) to `QuickPost`s.
-pub fn submissions_to_quickposts(submissions: &Submissions) -> Vec<QuickPost> {
+pub fn submissions_to_quickposts(submissions: Submissions) -> Vec<QuickPost> {
     submissions
         .data
         .children
-        .iter()
+        .into_iter()
         .map(|submission| {
-            let data = &submission.data;
+            let data = submission.data;
             // For a link or media post, use the content URL, otherwise use selftext
-            let content = data
-                .url
-                .as_ref()
-                .map_or_else(|| data.selftext.clone(), ToString::to_string);
+            let content = data.url.unwrap_or(data.selftext);
 
             QuickPost {
-                title: data.title.clone(),
+                title: data.title,
                 score: data.score,
                 content,
                 nsfw: data.over_18,
-                permalink: data.permalink.clone(),
-                sub: data.subreddit.clone(),
+                permalink: data.permalink,
+                sub: data.subreddit,
             }
         })
         .collect()

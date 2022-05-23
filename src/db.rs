@@ -16,7 +16,6 @@ use tracing::error;
 /// Discord channel data for mongo.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct Channel {
-    /// Serializes to a string.
     #[serde(rename = "channel", with = "crate::serde::channel_id")]
     pub channel_id: ChannelId,
     #[serde(flatten)]
@@ -36,7 +35,7 @@ pub struct ChannelInfo {
 /// A discord channel that has banned a subreddit.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct BannedSub {
-    #[serde(rename = "channel", with = "crate::serde::channel_id")]
+    #[serde(rename = "channelID", with = "crate::serde::channel_id")]
     pub channel_id: ChannelId,
     pub subreddit: String,
     #[serde(rename = "_id", skip_serializing)]
