@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
@@ -110,49 +109,41 @@ impl Data {
     pub async fn add_db_channel(&mut self, channel: ChannelId, info: ChannelInfo) -> Result<()> {
         let channels = self.db.collection::<Channel>("channels");
         let channel_id = channel.0.to_string();
-        let filter = doc! {
-            "$or": {
-                "channelID": &channel_id,
-                "channelid": &channel_id,
-            }
-        };
-        let time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap() // Unwrap: system time should be greater than unix epoch time
-            .as_secs() as i64;
+        let time = Utc::now().timestamp();
 
-        // TODO: find_one_and_update
-        match channels.find_one(filter.clone(), None).await? {
-            Some(_) => {
-                channels
-                    .update_one(
-                        filter,
-                        doc! {
-                            "$set": {
-                                "channelID": &channel_id,
-                                "name": &info.name,
-                                "nsfw": &info.nsfw,
-                                "time": time
-                            }
-                        },
-                        None,
-                    )
-                    .await?;
-            }
-            None => {
-                channels
-                    .insert_one(
-                        Channel {
-                            channel_id: channel,
-                            info,
-                            time,
-                            id: None,
-                        },
-                        None,
-                    )
-                    .await?;
-            }
-        };
+        let doc = channels
+            .find_one_and_update(
+                doc! {
+                    "$or": {
+                        "channelID": &channel_id,
+                        "channelid": &channel_id,
+                    }
+                },
+                doc! {
+                    "$set": {
+                        "channelID": &channel_id,
+                        "name": &info.name,
+                        "nsfw": &info.nsfw,
+                        "time": time,
+                    }
+                },
+                None,
+            )
+            .await?;
+
+        if doc.is_none() {
+            channels
+                .insert_one(
+                    Channel {
+                        channel_id: channel,
+                        info,
+                        time,
+                        id: None,
+                    },
+                    None,
+                )
+                .await?;
+        }
 
         Ok(())
     }
