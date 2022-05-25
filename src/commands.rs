@@ -1,3 +1,3 @@
-//! Bot commands
+//! Bot commands.
 
 pub mod admin;

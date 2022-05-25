@@ -1,6 +1,6 @@
-//! Serde support
+//! Serde support.
 
-/// Serde support for serenity's `ChannelId` type
+/// Serde support for serenity's `ChannelId` type.
 pub mod channel_id {
     use poise::serenity_prelude::ChannelId;
     use serde::de::{self, Visitor};

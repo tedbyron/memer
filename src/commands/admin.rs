@@ -1,4 +1,4 @@
-//! Admin commands
+//! Admin commands.
 
 use anyhow::Result;
 use poise::builtins::register_application_commands;

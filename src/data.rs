@@ -1,4 +1,4 @@
-//! Bot runtime data
+//! Bot runtime data.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -21,6 +21,7 @@ use crate::db::{Channel, ChannelInfo};
 /// Map of subreddit groups and subreddit names from `subs.json`.
 pub static SUBS: OnceCell<HashMap<String, Vec<String>>> = OnceCell::new();
 
+/// Bot runtime data.
 #[derive(Debug)]
 pub struct Data {
     /// The bot's user ID.
@@ -67,7 +68,6 @@ pub struct QuickPost {
 
 impl Data {
     /// Add `QuickPost`s to the cache.
-    #[inline]
     pub fn add_posts(&mut self, sub: String, posts: Vec<QuickPost>) {
         match self.posts.entry(sub) {
             Entry::Occupied(ref mut entry) => entry.get_mut().extend(posts),
@@ -78,7 +78,6 @@ impl Data {
     }
 
     /// Add a `QuickPost` to the blacklist.
-    #[inline]
     pub fn add_blacklist(&mut self, channel: ChannelId, post: QuickPost) {
         match self.blacklist.entry(channel) {
             Entry::Occupied(ref mut entry) => entry.get_mut().push(post),
@@ -89,7 +88,6 @@ impl Data {
     }
 
     /// Reset the blacklist and the blacklist time.
-    #[inline]
     pub fn reset_blacklist(&mut self) {
         self.blacklist = Arc::new(DashMap::new());
         self.blacklist_time = Utc::now() + Duration::hours(3);
@@ -97,7 +95,6 @@ impl Data {
 
     /// Update the blacklist time and reset the blacklist if the current time is greater than the
     /// original blacklist time.
-    #[inline]
     pub fn update_blacklist_time(&mut self) {
         if Utc::now() >= self.blacklist_time {
             self.reset_blacklist();
@@ -105,7 +102,6 @@ impl Data {
     }
 
     /// Add channel info to the database.
-    #[inline]
     pub async fn add_db_channel(&mut self, channel: ChannelId, info: ChannelInfo) -> Result<()> {
         let channels = self.db.collection::<Channel>("channels");
         let channel_id = channel.0.to_string();

@@ -1,4 +1,4 @@
-//! Bot setup helpers
+//! Bot setup helpers.
 
 use std::collections::HashMap;
 use std::sync::Arc;

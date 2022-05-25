@@ -1,4 +1,4 @@
-//! Mongo stuff
+//! Mongo stuff.
 
 use std::env;
 use std::sync::Arc;
@@ -9,7 +9,7 @@ use mongodb::bson::oid::ObjectId;
 use mongodb::bson::{self, Bson};
 use mongodb::options::ClientOptions;
 use mongodb::{Client, Database};
-use poise::futures_util::{Stream, StreamExt};
+use poise::futures_util::{future, Stream, StreamExt};
 use poise::serenity_prelude::ChannelId;
 use tracing::error;
 
@@ -66,21 +66,28 @@ pub async fn client_and_db() -> Result<(Client, Database)> {
 #[tracing::instrument(skip_all)]
 pub async fn all_channels(db: &Database) -> Result<Arc<DashMap<ChannelId, ChannelInfo>>> {
     // TODO: explicitly type collection if there are no errors deserializing
-    let mut cursor = db.collection("channels").find(None, None).await?;
+    let cursor = db.collection("channels").find(None, None).await?;
     let (lo, hi) = cursor.size_hint();
-    let size = hi.unwrap_or(lo);
-    let channels = Arc::new(DashMap::with_capacity(size));
+    let channels = Arc::new(DashMap::with_capacity(hi.unwrap_or(lo)));
 
-    while let Some(res) = cursor.next().await {
-        if let Ok(doc) = res {
-            match bson::from_bson::<Channel>(Bson::Document(doc)) {
-                Ok(channel) => {
-                    channels.insert(channel.channel_id, channel.info);
+    let handles = cursor
+        .map(|res| {
+            let channels = Arc::clone(&channels);
+
+            tokio::spawn(async move {
+                if let Ok(doc) = res {
+                    match bson::from_bson::<Channel>(Bson::Document(doc)) {
+                        Ok(channel) => {
+                            channels.insert(channel.channel_id, channel.info);
+                        }
+                        Err(e) => error!("failed to deserialize channel from bson: {e}"),
+                    }
                 }
-                Err(e) => error!("failed to deserialize channel from bson: {e}"),
-            }
-        }
-    }
+            })
+        })
+        .collect::<Vec<_>>()
+        .await;
+    future::join_all(handles).await;
 
     Ok(channels)
 }
