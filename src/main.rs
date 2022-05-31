@@ -6,17 +6,19 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::{Error, Result};
+use anyhow::{Context as _, Error, Result};
 use chrono::{Duration, Utc};
 use dashmap::DashMap;
+use governor::clock::{Clock, QuantaUpkeepClock};
+use governor::state::keyed::DefaultKeyedStateStore;
 use governor::{Quota, RateLimiter};
+
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
 use tracing::{error, info, info_span, trace, Instrument};
 use tracing_subscriber::EnvFilter;
 
 mod commands;
-mod common;
 mod data;
 mod db;
 mod serde;
@@ -55,11 +57,27 @@ async fn run() -> Result<()> {
     let app_id = setup::app_id()?;
 
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
-        #[rustfmt::skip]
-        commands: vec![
-            commands::admin::ping(),
-            commands::admin::register(),
-        ],
+        commands: vec![commands::admin::ping(), commands::admin::register()],
+
+        // Check our rate limiter before every command is executed
+        command_check: Some(|ctx| {
+            let data = ctx.data();
+            let gov = Arc::clone(&data.governor);
+
+            Box::pin(async move {
+                match gov.check_key(&ctx.channel_id()) {
+                    Ok(_) => Ok(true),
+                    Err(not_until) => {
+                        ctx.say(format!(
+                            "This channel is sending too many requests! Try again in {}",
+                            humantime::format_duration(not_until.wait_time_from(data.clock.now())),
+                        ))
+                        .await;
+                        Ok(false)
+                    }
+                }
+            })
+        }),
         ..FrameworkOptions::default()
     };
 
@@ -73,49 +91,52 @@ async fn run() -> Result<()> {
                 async move {
                     info!("starting...");
                     let timer = Instant::now();
-                    let Ready { user, guilds, .. } = ready;
 
-                    info!("logged in as {} on {} servers", user.tag(), guilds.len());
+                    let Ready { user, guilds, .. } = ready;
+                    let bot_tag = user.tag();
+
+                    info!("logged in as {} on {} servers", bot_tag, guilds.len());
 
                     setup::invite_url(ctx, ready).await;
                     setup::set_activity(ctx).await;
                     setup::register_commands(ctx, framework, guilds).await;
 
-                    // Unwrap: any invalid value will cause an error to propagate
+                    // Unwrap: any invalid value will cause an error to propagate instead of panic
                     data::SUBS.set(setup::subs_from_file()?).unwrap();
                     let (mongo, db) = db::client_and_db().await?;
                     let channels = db::all_channels(&db).await?;
 
-                    let posts = setup::all_hot_posts().await;
-                    let cache_time = Utc::now() + Duration::hours(1);
-
-                    let blacklist = Arc::new(DashMap::new());
-                    let blacklist_time = Utc::now() + Duration::hours(3);
-
-                    let last_post = Arc::new(DashMap::new());
-                    let governor = Arc::new(RateLimiter::keyed(Quota::per_minute(
-                        // Unwrap: 10_u32 is a valid NonZeroU32
-                        10.try_into().unwrap(),
-                    )));
+                    let clock =
+                        QuantaUpkeepClock::from_interval(std::time::Duration::from_millis(100))
+                            .map_err(Error::new)
+                            .context("failed to create upkeep clock")?;
 
                     let data = Data {
                         bot_id: user.id.0,
                         bot_name: user.name.to_string(),
-                        bot_tag: user.tag(),
+                        bot_tag,
 
                         mongo,
                         db,
 
-                        cache_time,
-                        blacklist_time,
+                        cache_time: Utc::now() + Duration::hours(1),
+                        blacklist_time: Utc::now() + Duration::hours(3),
 
-                        posts,
+                        posts: setup::all_hot_posts().await,
 
                         channels,
-                        blacklist,
-                        last_post,
+                        blacklist: Arc::new(DashMap::new()),
+                        last_post: Arc::new(DashMap::new()),
 
-                        governor,
+                        governor: Arc::new(RateLimiter::new(
+                            Quota::per_minute(
+                                // Unwrap: 10_u32 is a valid NonZeroU32
+                                10.try_into().unwrap(),
+                            ),
+                            DefaultKeyedStateStore::default(),
+                            &clock,
+                        )),
+                        clock,
                     };
 
                     info!("done in {}", humantime::format_duration(timer.elapsed()));

@@ -7,7 +7,7 @@ use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
-use governor::clock::DefaultClock;
+use governor::clock::QuantaUpkeepClock;
 use governor::state::keyed::DefaultKeyedStateStore;
 use governor::RateLimiter;
 use mongodb::bson::doc;
@@ -52,7 +52,9 @@ pub struct Data {
     pub last_post: Arc<DashMap<ChannelId, QuickPost>>,
 
     /// Request rate limiter keyed by discord channel ID.
-    pub governor: Arc<RateLimiter<ChannelId, DefaultKeyedStateStore<ChannelId>, DefaultClock>>,
+    pub governor: Arc<RateLimiter<ChannelId, DefaultKeyedStateStore<ChannelId>, QuantaUpkeepClock>>,
+    /// The rate limiter's clock. Runs in a background thread, waking at a predefined interval.
+    pub clock: QuantaUpkeepClock,
 }
 
 /// Specific data for a reddit post.
