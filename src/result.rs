@@ -1,4 +1,4 @@
-//! Result extensions for tracing.
+//! Result extension for tracing errors.
 
 use tracing::error;
 
