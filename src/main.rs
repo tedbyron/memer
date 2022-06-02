@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::{Context as _, Error, Result};
+use anyhow::{anyhow, Error, Result};
 use chrono::{Duration, Utc};
 use dashmap::DashMap;
 use governor::clock::{Clock, QuantaUpkeepClock};
@@ -21,10 +21,12 @@ use tracing_subscriber::EnvFilter;
 mod commands;
 mod data;
 mod db;
+mod result;
 mod serde;
 mod setup;
 
 pub use data::Data;
+pub use result::TraceErr;
 
 pub type Context<'a> = poise::Context<'a, Data, Error>;
 
@@ -72,7 +74,8 @@ async fn run() -> Result<()> {
                             "This channel is sending too many requests! Try again in {}",
                             humantime::format_duration(not_until.wait_time_from(data.clock.now())),
                         ))
-                        .await;
+                        .await
+                        .or_trace();
                         Ok(false)
                     }
                 }
@@ -108,12 +111,14 @@ async fn run() -> Result<()> {
 
                     let clock =
                         QuantaUpkeepClock::from_interval(std::time::Duration::from_millis(100))
-                            .map_err(Error::new)
-                            .context("failed to create upkeep clock")?;
+                            .map_err(|_| anyhow!("failed to create rate limiter clock"))?;
+                    // TODO: `quanta::Error` does not implement `std::error::Error`
+                    // .map_err(Into::into)
+                    // .context("failed to create upkeep clock")?;
 
                     let data = Data {
                         bot_id: user.id.0,
-                        bot_name: user.name.to_string(),
+                        bot_name: user.name.clone(),
                         bot_tag,
 
                         mongo,
