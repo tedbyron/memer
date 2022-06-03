@@ -124,7 +124,7 @@ pub async fn register_commands(
     info!("registering application commands on all servers...");
     let timer = Instant::now();
 
-    // FIXME: probably some way turn this loop into tasks
+    // FIXME: maybe some way turn this loop into tasks
     for guild_id in guilds.iter().map(|guild| guild.id) {
         let res = guild_id
             .set_application_commands(ctx, |commands| {
@@ -147,12 +147,12 @@ pub async fn all_hot_posts() -> Arc<DashMap<String, Vec<QuickPost>>> {
     info!("populating subreddit post data...");
     let timer = Instant::now();
 
-    // Unwrap: data::SUBS is set in the user_data_setup function before this gets called
+    // Unwrap: data::SUBS is set before this is called
     let subs = data::SUBS.get().unwrap().values().flatten();
     let (lo, hi) = subs.size_hint();
     let posts = Arc::new(DashMap::with_capacity(hi.unwrap_or(lo)));
 
-    future::join_all(subs.map(|sub| tokio::spawn(hot_posts(sub, Arc::clone(&posts))))).await;
+    future::join_all(subs.map(|sub| tokio::spawn(hot_posts(sub, posts.clone())))).await;
 
     info!("done in {}", humantime::format_duration(timer.elapsed()));
     posts

@@ -2,12 +2,12 @@
 
 use tracing::error;
 
-pub trait TraceErr<T> {
+pub trait ResultExt<T> {
     fn or_trace(self);
     fn trace_err(self) -> anyhow::Result<T>;
 }
 
-impl<T, E> TraceErr<T> for Result<T, E>
+impl<T, E> ResultExt<T> for Result<T, E>
 where
     E: std::error::Error + Send + Sync + 'static,
 {

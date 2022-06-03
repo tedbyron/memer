@@ -72,7 +72,7 @@ pub async fn all_channels(db: &Database) -> Result<Arc<DashMap<ChannelId, Channe
 
     let handles = cursor
         .map(|res| {
-            let channels = Arc::clone(&channels);
+            let channels = channels.clone();
 
             tokio::spawn(async move {
                 if let Ok(doc) = res {

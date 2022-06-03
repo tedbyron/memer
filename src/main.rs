@@ -26,7 +26,7 @@ mod serde;
 mod setup;
 
 pub use data::Data;
-pub use result::TraceErr;
+pub use result::ResultExt;
 
 pub type Context<'a> = poise::Context<'a, Data, Error>;
 
@@ -53,6 +53,7 @@ async fn run() -> Result<()> {
         .with_target(false)
         .with_env_filter(EnvFilter::from_env("MEMER_LOG"))
         .init();
+    // TODO: https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.intersperse
     trace!(command = %env::args().collect::<Vec<_>>().join(" "));
 
     let token = setup::token()?;
@@ -61,10 +62,10 @@ async fn run() -> Result<()> {
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
         commands: vec![commands::admin::ping(), commands::admin::register()],
 
-        // Check our rate limiter before every command is executed
+        // Check the rate limiter before every command is executed
         command_check: Some(|ctx| {
             let data = ctx.data();
-            let gov = Arc::clone(&data.governor);
+            let gov = data.governor.clone();
 
             Box::pin(async move {
                 match gov.check_key(&ctx.channel_id()) {
@@ -113,8 +114,7 @@ async fn run() -> Result<()> {
                         QuantaUpkeepClock::from_interval(std::time::Duration::from_millis(100))
                             .map_err(|_| anyhow!("failed to create rate limiter clock"))?;
                     // TODO: `quanta::Error` does not implement `std::error::Error`
-                    // .map_err(Into::into)
-                    // .context("failed to create upkeep clock")?;
+                    // https://github.com/metrics-rs/quanta/pull/68
 
                     let data = Data {
                         bot_id: user.id.0,
@@ -153,8 +153,7 @@ async fn run() -> Result<()> {
         .build()
         .await?;
 
-    let shard_mgr = Arc::clone(&framework.shard_manager());
-
+    let shard_mgr = framework.shard_manager();
     tokio::spawn(async move {
         match tokio::signal::ctrl_c().await {
             Ok(_) => shard_mgr.lock().await.shutdown_all().await,
