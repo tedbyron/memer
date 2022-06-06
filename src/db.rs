@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use dashmap::DashMap;
-use mongodb::bson::oid::ObjectId;
 use mongodb::bson::{self, Bson};
 use mongodb::options::ClientOptions;
 use mongodb::{Client, Database};
@@ -21,8 +20,6 @@ pub struct Channel {
     #[serde(flatten)]
     pub info: ChannelInfo,
     pub time: i64,
-    #[serde(rename = "_id", skip_serializing)]
-    pub id: Option<ObjectId>,
 }
 
 /// Discord channel information.
@@ -38,8 +35,6 @@ pub struct BannedSub {
     #[serde(rename = "channelID", with = "crate::serde::channel_id")]
     pub channel_id: ChannelId,
     pub subreddit: String,
-    #[serde(rename = "_id", skip_serializing)]
-    pub id: Option<ObjectId>,
 }
 
 /// Create a mongodb client.

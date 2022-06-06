@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use governor::clock::QuantaUpkeepClock;
@@ -89,37 +89,37 @@ impl Data {
         }
     }
 
-    /// Reset the blacklist and the blacklist time.
-    pub fn reset_blacklist(&mut self) {
-        self.blacklist = Arc::new(DashMap::new());
-        self.blacklist_time = Utc::now() + Duration::hours(3);
-    }
+    // /// Reset the blacklist and the blacklist time.
+    // pub fn reset_blacklist(&mut self) {
+    //     self.blacklist = Arc::new(DashMap::new());
+    //     self.blacklist_time = Utc::now() + Duration::hours(3);
+    // }
 
-    /// Update the blacklist time and reset the blacklist if the current time is greater than the
-    /// original blacklist time.
-    pub fn update_blacklist_time(&mut self) {
-        if Utc::now() >= self.blacklist_time {
-            self.reset_blacklist();
-        }
-    }
+    // /// Update the blacklist time and reset the blacklist if the current time is greater than the
+    // /// original blacklist time.
+    // pub fn update_blacklist_time(&mut self) {
+    //     if Utc::now() >= self.blacklist_time {
+    //         self.reset_blacklist();
+    //     }
+    // }
 
     /// Add channel info to the database.
-    pub async fn add_db_channel(&mut self, channel: ChannelId, info: ChannelInfo) -> Result<()> {
+    pub async fn add_db_channel(&mut self, channel_id: ChannelId, info: ChannelInfo) -> Result<()> {
         let channels = self.db.collection::<Channel>("channels");
-        let channel_id = channel.0.to_string();
+        let channel = channel_id.0.to_string();
         let time = Utc::now().timestamp();
 
         let doc = channels
             .find_one_and_update(
                 doc! {
                     "$or": {
-                        "channelID": &channel_id,
-                        "channelid": &channel_id,
+                        "channelID": &channel,
+                        "channelid": &channel,
                     }
                 },
                 doc! {
                     "$set": {
-                        "channelID": &channel_id,
+                        "channelID": &channel,
                         "name": &info.name,
                         "nsfw": &info.nsfw,
                         "time": time,
@@ -133,10 +133,9 @@ impl Data {
             channels
                 .insert_one(
                     Channel {
-                        channel_id: channel,
+                        channel_id,
                         info,
                         time,
-                        id: None,
                     },
                     None,
                 )

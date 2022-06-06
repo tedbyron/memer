@@ -15,6 +15,7 @@ use governor::{Quota, RateLimiter};
 
 use poise::serenity_prelude::*;
 use poise::{Framework, FrameworkOptions};
+use tokio::sync::mpsc;
 use tracing::{error, info, info_span, trace, Instrument};
 use tracing_subscriber::EnvFilter;
 
@@ -58,16 +59,15 @@ async fn run() -> Result<()> {
 
     let token = setup::token()?;
     let app_id = setup::app_id()?;
-
+    let (tx, mut rx) = mpsc::unbounded_channel::<()>();
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
         commands: vec![commands::admin::ping(), commands::admin::register()],
-
-        // Check the rate limiter before every command is executed
         command_check: Some(|ctx| {
             let data = ctx.data();
             let gov = data.governor.clone();
 
             Box::pin(async move {
+                // Check the rate limiter before every command is executed
                 match gov.check_key(&ctx.channel_id()) {
                     Ok(_) => Ok(true),
                     Err(not_until) => {
@@ -110,9 +110,8 @@ async fn run() -> Result<()> {
                     let (mongo, db) = db::client_and_db().await?;
                     let channels = db::all_channels(&db).await?;
 
-                    let clock =
-                        QuantaUpkeepClock::from_interval(std::time::Duration::from_millis(100))
-                            .map_err(|_| anyhow!("failed to create rate limiter clock"))?;
+                    let clock = QuantaUpkeepClock::from_interval(std::time::Duration::from_secs(1))
+                        .map_err(|e| anyhow!("failed to create rate limiter clock: {e}"))?;
                     // TODO: `quanta::Error` does not implement `std::error::Error`
                     // https://github.com/metrics-rs/quanta/pull/68
 
@@ -154,6 +153,7 @@ async fn run() -> Result<()> {
         .await?;
 
     let shard_mgr = framework.shard_manager();
+
     tokio::spawn(async move {
         match tokio::signal::ctrl_c().await {
             Ok(_) => shard_mgr.lock().await.shutdown_all().await,
@@ -163,6 +163,9 @@ async fn run() -> Result<()> {
 
     info!("ready");
     framework.start_autosharded().await?;
+
+    drop(tx);
+    let _ = rx.recv().await;
 
     Ok(())
 }
