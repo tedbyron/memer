@@ -59,7 +59,8 @@ async fn run() -> Result<()> {
 
     let token = setup::token()?;
     let app_id = setup::app_id()?;
-    let (tx, mut rx) = mpsc::unbounded_channel::<()>();
+    let (tx, rx) = mpsc::unbounded_channel::<()>();
+    let rx = Arc::new(Mutex::new(rx));
     let options: FrameworkOptions<Data, Error> = FrameworkOptions {
         commands: vec![commands::admin::ping(), commands::admin::register()],
         command_check: Some(|ctx| {
@@ -165,7 +166,7 @@ async fn run() -> Result<()> {
     framework.start_autosharded().await?;
 
     drop(tx);
-    let _ = rx.recv().await;
+    let _ = rx.lock().await.recv().await;
 
     Ok(())
 }
